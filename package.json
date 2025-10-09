@@ -9,13 +9,13 @@
   "main": "./dist/esm/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",
-"exports": {
-  ".": {
-    "import": "./dist/esm/index.js",
-    "require": "./dist/esm/index.js",
-    "types": "./dist/types/index.d.ts"
-  }
-},
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "bun run build.ts",
     "format": "bun x prettier --write '**/*.{js,jsx,ts,tsx,json,md,yaml,yml}'",

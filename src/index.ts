@@ -1,373 +1,425 @@
 /**
-* Express Middleware/Router for Payload Local API.
-*
-* This router mimics the functionality of a simple Next.js API router by intercepting
-* requests to /api/:collection, /api/:collection/:id, and auth endpoints.
-* All requests are mapped directly to the high-performance Payload Local API.
-*
-* It assumes the Payload instance is attached to the request object as `req.payload`.
-*/
-
+ * Express Middleware/Router for Payload Local API.
+ *
+ * This router mimics the functionality of a simple Next.js API router by intercepting
+ * requests to /api/:collection, /api/:collection/:id, and auth endpoints.
+ * All requests are mapped directly to the high-performance Payload Local API.
+ *
+ * It assumes the Payload instance is attached to the request object as `req.payload`.
+ */
 
 import * as core from "express-serve-static-core";
-import jwt from 'jsonwebtoken'; 
-import crypto from 'crypto';
-import { Payload } from 'payload';
-import { NextFunction, Request, Response, Router, Express } from 'express';
-
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { Payload } from "payload";
+import { NextFunction, Request, Response, Router, Express } from "express";
 
 interface PayloadRequestQuery extends core.Query {}
-interface PayloadRequest extends Request<core.ParamsDictionary, any, any, PayloadRequestQuery> {
-    user: any     // Payload user's data
+interface PayloadRequest
+  extends Request<core.ParamsDictionary, any, any, PayloadRequestQuery> {
+  user: any; // Payload user's data
 }
 
-
-
 export function calc(a: number, b: number): number {
-    return a + b;
+  return a + b;
 }
 
 export function payloadAPIRouterMiddleware(payload: Payload) {
-    const router = Router();
+  const router = Router();
 
-    /**
-    * Custom JWT Auth Middleware for Payload
-    * Express middleware to manually set req.user from a Bearer Token.
-    * 
-    * @param {object} req - Express request object (must have req.payload attached).
-    * @param {object} res - Express response object.
-    * @param {function} next - Express next middleware function.
-    */
-    async function payloadJwtAuthMiddleware(req: Request, res: Response, next: NextFunction) {
-        let authHeader: string = '';
-        
-        if (req && req.headers) {
-            authHeader = req.headers['authorization'] as string
-        }
-        
-        // In production, this would come from process.env.PAYLOAD_SECRET
-        const PAYLOAD_SECRET = payload.config ? payload.config.secret : "";
-        
-        // Check for PAYLOAD_SECRET, Payload instance, Authorization header, and Bearer prefix
-        if (!PAYLOAD_SECRET || !payload || !authHeader || !authHeader.startsWith('Bearer ')) {
-            return next();
-        }
-        
-        // Extract the token string
-        const token = authHeader.split(' ')[1];
-        
-        if (!token) {
-            return next();
-        }
-        
-        try {
-            // --- JWT Verification and Decoding ---
-            const payloadVerificationSecret = crypto.createHash('sha256')
-            .update(PAYLOAD_SECRET)
-            .digest('hex')
-            .slice(0, 32);
-            
-            
-            const decoded = jwt.verify(token, payloadVerificationSecret) as any;
-            const userId = decoded.id; 
-            
-            if (!userId) {
-                throw new Error('Token payload missing user ID.');
-            }
-            
-            // --- Fetch the full User Document ---
-            // Use the Local API to retrieve the user by ID.
-            // We use overrideAccess: true because this is an internal auth flow, 
-            // and we need to fetch the user regardless of the collection's public 'read' access rules.
-            const fullUserDocument = await payload.findByID({ 
-                collection: 'users', // Assumes 'users' is the slug for the authenticated collection
-                id: userId,
-                overrideAccess: true, 
-                //@ts-ignore
-                req: req, // Pass req for Payload context
-            });
-            
-            if (fullUserDocument) {
-                // 3. Success! Attach the full user document to the request object
-                // @ts-ignore
-                req.user = fullUserDocument; 
-                console.log(`[JWT Middleware] Successfully authenticated user: ${fullUserDocument.id}`);
-            } else {
-                // Token was valid, but the user was not found in the database (e.g., deleted account)
-                console.log(`[JWT Middleware] Token was valid, but user ID ${userId} not found in DB.`);
-            }
-            
-        } catch (e: any) {
-            // This catches errors from jwt.verify (expired, bad signature) or other failures.
-            console.log(`[JWT Middleware] Authentication failed: ${e.message}`);
-        }
-        
-        // Allow the request to continue to the next middleware/router
-        next();
+  /**
+   * Custom JWT Auth Middleware for Payload
+   * Express middleware to manually set req.user from a Bearer Token.
+   *
+   * @param {object} req - Express request object (must have req.payload attached).
+   * @param {object} res - Express response object.
+   * @param {function} next - Express next middleware function.
+   */
+  async function payloadJwtAuthMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    let authHeader: string = "";
+
+    if (req && req.headers) {
+      authHeader = req.headers["authorization"] as string;
     }
 
-    
-    router.use('/api/:collection/', (req: Request, res: Response, next: NextFunction) => {
-        const { collection } = req.params;
-        
-        const payloadCollections = Object.keys(payload.collections)
-        if (!payloadCollections.includes(collection)){
-           return next('router')
-        }
-        next();
-    })
-    
-    /**
-     * Helper function to handle async operations and catch errors consistently.
-     * @param {function} fn - The asynchronous function to execute.
-     */
-    const asyncHandler = (fn) => (req, res, next) => {
-        Promise.resolve(fn(req, res, next)).catch(next);
-    };
-   
-   
-    /**
-     * Middleware to enforce authentication for mutation routes (POST, PATCH, DELETE).
-     * This relies on Payload's session middleware having already populated req.user.
-     */
-    const isAuthenticated = (req, res, next) => {
-        // req.user is populated by Payload's internal Express authentication middleware
-        if (!req.user) {
-            return res.status(401).json({ error: 'Unauthorized', message: 'Payload: Authentication required to perform actions.' });
-        }
-        next();
-    };
+    // In production, this would come from process.env.PAYLOAD_SECRET
+    const PAYLOAD_SECRET = payload.config ? payload.config.secret : "";
 
-    // --- AUTHENTICATION ROUTES ---
+    // Check for PAYLOAD_SECRET, Payload instance, Authorization header, and Bearer prefix
+    if (
+      !PAYLOAD_SECRET ||
+      !payload ||
+      !authHeader ||
+      !authHeader.startsWith("Bearer ")
+    ) {
+      return next();
+    }
 
-    /**
-     * 1. LOGIN (POST /api/:collection/login)
-     * Maps to: payload.login({ collection, data, req, res })
-     */
-    router.post('/api/:collection/login', asyncHandler(async (req, res) => {
-        const { collection } = req.params;
-        
+    // Extract the token string
+    const token = authHeader.split(" ")[1];
 
-        // Note: req and res MUST be passed for Payload to handle session cookies.
-        const result = await payload.login({
-            collection,
-            data: req.body, // Expects { email, password }
-            req,
-            //@ts-ignore
-            res,
-        });
+    if (!token) {
+      return next();
+    }
 
-        // Payload handles status codes (usually 200 on success)
-        return res.json(result);
-    }));
+    try {
+      // --- JWT Verification and Decoding ---
+      const payloadVerificationSecret = crypto
+        .createHash("sha256")
+        .update(PAYLOAD_SECRET)
+        .digest("hex")
+        .slice(0, 32);
 
-    /**
-     * 2. LOGOUT (POST /api/:collection/logout)
-     * Maps to: payload.logout({ collection, req, res })
-     */
-    router.post('/api/:collection/logout', asyncHandler(async (req, res) => {
-        const { collection } = req.params;
-        
+      const decoded = jwt.verify(token, payloadVerificationSecret) as any;
+      const userId = decoded.id;
 
-        // Note: req and res MUST be passed for Payload to clear session cookies.
+      if (!userId) {
+        throw new Error("Token payload missing user ID.");
+      }
+
+      // --- Fetch the full User Document ---
+      // Use the Local API to retrieve the user by ID.
+      // We use overrideAccess: true because this is an internal auth flow,
+      // and we need to fetch the user regardless of the collection's public 'read' access rules.
+      const fullUserDocument = await payload.findByID({
+        collection: "users", // Assumes 'users' is the slug for the authenticated collection
+        id: userId,
+        overrideAccess: true,
         //@ts-ignore
-        const result = await payload.logout({
-            collection,
-            req,
-            res,
+        req: req, // Pass req for Payload context
+      });
+
+      if (fullUserDocument) {
+        // 3. Success! Attach the full user document to the request object
+        // @ts-ignore
+        req.user = fullUserDocument;
+        console.log(
+          `[JWT Middleware] Successfully authenticated user: ${fullUserDocument.id}`,
+        );
+      } else {
+        // Token was valid, but the user was not found in the database (e.g., deleted account)
+        console.log(
+          `[JWT Middleware] Token was valid, but user ID ${userId} not found in DB.`,
+        );
+      }
+    } catch (e: any) {
+      // This catches errors from jwt.verify (expired, bad signature) or other failures.
+      console.log(`[JWT Middleware] Authentication failed: ${e.message}`);
+    }
+
+    // Allow the request to continue to the next middleware/router
+    next();
+  }
+
+  router.use(
+    "/api/:collection/",
+    (req: Request, res: Response, next: NextFunction) => {
+      const { collection } = req.params;
+
+      const payloadCollections = Object.keys(payload.collections);
+      if (!payloadCollections.includes(collection)) {
+        return next("router");
+      }
+      next();
+    },
+  );
+
+  /**
+   * Helper function to handle async operations and catch errors consistently.
+   * @param {function} fn - The asynchronous function to execute.
+   */
+  const asyncHandler = (fn) => (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+
+  /**
+   * Middleware to enforce authentication for mutation routes (POST, PATCH, DELETE).
+   * This relies on Payload's session middleware having already populated req.user.
+   */
+  const isAuthenticated = (req, res, next) => {
+    // req.user is populated by Payload's internal Express authentication middleware
+    if (!req.user) {
+      return res
+        .status(401)
+        .json({
+          error: "Unauthorized",
+          message: "Payload: Authentication required to perform actions.",
         });
+    }
+    next();
+  };
 
-        // Payload handles status codes (usually 200 on success)
-        return res.json(result);
-    }));
+  // --- AUTHENTICATION ROUTES ---
 
-    /**
-     * 3. ME (GET /api/:collection/me)
-     * Maps to: payload.me({ collection, req })
-     * Returns the currently authenticated user document, or null.
-     */
-    router.get('/api/:collection/me', payloadJwtAuthMiddleware, asyncHandler(async (req, res) => {
-        const { collection } = req.params;
+  /**
+   * 1. LOGIN (POST /api/:collection/login)
+   * Maps to: payload.login({ collection, data, req, res })
+   */
+  router.post(
+    "/api/:collection/login",
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
 
-        const {id} = req.user;
+      // Note: req and res MUST be passed for Payload to handle session cookies.
+      const result = await payload.login({
+        collection,
+        data: req.body, // Expects { email, password }
+        req,
+        //@ts-ignore
+        res,
+      });
 
+      // Payload handles status codes (usually 200 on success)
+      return res.json(result);
+    }),
+  );
 
-        // Note: req is required for Payload to check the session/auth status.
-        const result = await payload.findByID({
-            collection,
-            id,
-        });
+  /**
+   * 2. LOGOUT (POST /api/:collection/logout)
+   * Maps to: payload.logout({ collection, req, res })
+   */
+  router.post(
+    "/api/:collection/logout",
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
 
-        const data = {...result}
-        delete data['sessions'];
-        
-        // Payload handles status codes (usually 200 on success, or 401 if unauthorized)
-        return res.json(data);
-    }));
+      // Note: req and res MUST be passed for Payload to clear session cookies.
+      //@ts-ignore
+      const result = await payload.logout({
+        collection,
+        req,
+        res,
+      });
 
-    // --- CRUD ROUTES (COLLECTIONS) ---
+      // Payload handles status codes (usually 200 on success)
+      return res.json(result);
+    }),
+  );
 
-    /**
-     * 4. FIND MANY (GET /api/:collection)
-     * Maps to: payload.find({ collection, where, limit, page, ... })
-     * NOTE: req is passed to enforce Payload's 'read' access control.
-     */
-    router.get('/api/:collection', payloadJwtAuthMiddleware, isAuthenticated, asyncHandler(async (req, res) => {
-        const { collection } = req.params;
-        const { query } = req;
-        
+  /**
+   * 3. ME (GET /api/:collection/me)
+   * Maps to: payload.me({ collection, req })
+   * Returns the currently authenticated user document, or null.
+   */
+  router.get(
+    "/api/:collection/me",
+    payloadJwtAuthMiddleware,
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
 
-        const result = await payload.find({
-            collection,
-            depth: query.depth ? parseInt(query.depth) : 0, // Default depth to 0 for performance
-            req, // <--- IMPORTANT: Pass req to enforce Payload's access control (e.g., read: authenticated)
-            ...query, // Pass all query params (limit, page, where, sort, etc.)
-        });
+      const { id } = req.user;
 
-        return res.status(200).json(result.docs);
-    }));
+      // Note: req is required for Payload to check the session/auth status.
+      const result = await payload.findByID({
+        collection,
+        id,
+      });
 
-    /**
-     * 5. FIND BY ID (GET /api/:collection/:id)
-     * Maps to: payload.findByID({ collection, id, depth, ... })
-     * NOTE: req is passed to enforce Payload's 'read' access control.
-     */
-    router.get('/api/:collection/:id', payloadJwtAuthMiddleware, isAuthenticated, asyncHandler(async (req, res) => {
-        const { collection, id } = req.params;
-        const { query } = req;
-        
+      const data = { ...result };
+      delete data["sessions"];
 
-        const result = await payload.findByID({
-            collection,
-            id,
-            depth: query.depth ? parseInt(query.depth) : 2, // Default depth to 2 for single lookups
-            req, // <--- IMPORTANT: Pass req to enforce Payload's access control (e.g., read: authenticated)
-            ...query,
-        });
+      // Payload handles status codes (usually 200 on success, or 401 if unauthorized)
+      return res.json(data);
+    }),
+  );
 
-        if (!result) {
-            return res.status(404).json({ error: `${collection} with ID ${id} not found.` });
-        }
+  // --- CRUD ROUTES (COLLECTIONS) ---
 
-        return res.status(200).json(result);
-    }));
+  /**
+   * 4. FIND MANY (GET /api/:collection)
+   * Maps to: payload.find({ collection, where, limit, page, ... })
+   * NOTE: req is passed to enforce Payload's 'read' access control.
+   */
+  router.get(
+    "/api/:collection",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
+      const { query } = req;
 
-    /**
-     * 6. CREATE (POST /api/:collection)
-     * Maps to: payload.create({ collection, data: req.body })
-     * Secured: Requires authenticated user (req.user)
-     */
-    router.post('/api/:collection', payloadJwtAuthMiddleware, isAuthenticated, asyncHandler(async (req, res) => {
-        const { collection } = req.params;
-        
+      const result = await payload.find({
+        collection,
+        depth: query.depth ? parseInt(query.depth) : 0, // Default depth to 0 for performance
+        req, // <--- IMPORTANT: Pass req to enforce Payload's access control (e.g., read: authenticated)
+        ...query, // Pass all query params (limit, page, where, sort, etc.)
+      });
 
-        const result = await payload.create({
-            collection,
-            data: req.body,
-        });
+      return res.status(200).json(result.docs);
+    }),
+  );
 
-        // 201 Created is the standard response for a successful POST operation
-        return res.status(201).json(result);
-    }));
+  /**
+   * 5. FIND BY ID (GET /api/:collection/:id)
+   * Maps to: payload.findByID({ collection, id, depth, ... })
+   * NOTE: req is passed to enforce Payload's 'read' access control.
+   */
+  router.get(
+    "/api/:collection/:id",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    asyncHandler(async (req, res) => {
+      const { collection, id } = req.params;
+      const { query } = req;
 
-    /**
-     * 7. UPDATE (PATCH /api/:collection/:id)
-     * Maps to: payload.update({ collection, id, data: req.body })
-     * Secured: Requires authenticated user (req.user)
-     */
-    router.patch('/api/:collection/:id', payloadJwtAuthMiddleware ,isAuthenticated, asyncHandler(async (req, res) => {
-        const { collection, id } = req.params;
-        
+      const result = await payload.findByID({
+        collection,
+        id,
+        depth: query.depth ? parseInt(query.depth) : 2, // Default depth to 2 for single lookups
+        req, // <--- IMPORTANT: Pass req to enforce Payload's access control (e.g., read: authenticated)
+        ...query,
+      });
 
-        const result = await payload.update({
-            collection,
-            id,
-            data: req.body,
-        });
+      if (!result) {
+        return res
+          .status(404)
+          .json({ error: `${collection} with ID ${id} not found.` });
+      }
 
-        return res.status(200).json(result);
-    }));
+      return res.status(200).json(result);
+    }),
+  );
 
-    /**
-     * 8. DELETE (DELETE /api/:collection/:id)
-     * Maps to: payload.delete({ collection, id })
-     * Secured: Requires authenticated user (req.user)
-     */
-    router.delete('/api/:collection/:id', payloadJwtAuthMiddleware ,isAuthenticated, asyncHandler(async (req, res) => {
-        const { collection } = req.params;
-        const { id } = req.params;
-        
+  /**
+   * 6. CREATE (POST /api/:collection)
+   * Maps to: payload.create({ collection, data: req.body })
+   * Secured: Requires authenticated user (req.user)
+   */
+  router.post(
+    "/api/:collection",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
 
-        const result = await payload.delete({
-            collection,
-            id,
-        });
+      const result = await payload.create({
+        collection,
+        data: req.body,
+      });
 
-        // 200 OK with the deleted document
-        return res.status(200).json(result);
-    }));
+      // 201 Created is the standard response for a successful POST operation
+      return res.status(201).json(result);
+    }),
+  );
 
-    // Error handling middleware (catch-all for errors thrown by async calls)
-    router.use((err, req, res, next) => {
-        console.error('Payload Router Error:', err);
+  /**
+   * 7. UPDATE (PATCH /api/:collection/:id)
+   * Maps to: payload.update({ collection, id, data: req.body })
+   * Secured: Requires authenticated user (req.user)
+   */
+  router.patch(
+    "/api/:collection/:id",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    asyncHandler(async (req, res) => {
+      const { collection, id } = req.params;
 
-        // Check for common Payload validation errors
-        if (err.name === 'ValidationError' || err.data?.errors) {
-            return res.status(400).json({
-                error: 'Validation Failed',
-                message: err.message,
-                data: err.data,
-            });
-        }
+      const result = await payload.update({
+        collection,
+        id,
+        data: req.body,
+      });
 
-        // Handle specific Payload auth errors (e.g., login failed)
-        if (err.status === 401) {
-            return res.status(401).json({ error: 'Unauthorized', message: err.message });
-        }
+      return res.status(200).json(result);
+    }),
+  );
 
-        // Handle not-found errors specifically if Payload doesn't map them correctly
-        if (err.message.includes('Not Found') || err.message.includes('Cast to ObjectId failed')) {
-             return res.status(404).json({ error: 'Resource Not Found', message: err.message });
-        }
+  /**
+   * 8. DELETE (DELETE /api/:collection/:id)
+   * Maps to: payload.delete({ collection, id })
+   * Secured: Requires authenticated user (req.user)
+   */
+  router.delete(
+    "/api/:collection/:id",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
+      const { id } = req.params;
 
-        // Generic server error
-        return res.status(500).json({ error: 'Server Error', message: err.message });
-    });
+      const result = await payload.delete({
+        collection,
+        id,
+      });
 
-    return router;
+      // 200 OK with the deleted document
+      return res.status(200).json(result);
+    }),
+  );
+
+  // Error handling middleware (catch-all for errors thrown by async calls)
+  router.use((err, req, res, next) => {
+    console.error("Payload Router Error:", err);
+
+    // Check for common Payload validation errors
+    if (err.name === "ValidationError" || err.data?.errors) {
+      return res.status(400).json({
+        error: "Validation Failed",
+        message: err.message,
+        data: err.data,
+      });
+    }
+
+    // Handle specific Payload auth errors (e.g., login failed)
+    if (err.status === 401) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: err.message });
+    }
+
+    // Handle not-found errors specifically if Payload doesn't map them correctly
+    if (
+      err.message.includes("Not Found") ||
+      err.message.includes("Cast to ObjectId failed")
+    ) {
+      return res
+        .status(404)
+        .json({ error: "Resource Not Found", message: err.message });
+    }
+
+    // Generic server error
+    return res
+      .status(500)
+      .json({ error: "Server Error", message: err.message });
+  });
+
+  return router;
 }
 
 // Export the function to be used as a router in an Express app
 
-
 /**
-* Example Usage in your Express main file (e.g., server.js):
-*
-* import express from 'express';
-* import payload from 'payload';
-* import payloadAPIRouter from './payload-next-app.js';
-* import path from 'path';
-*
-* const app = express();
-*
-* // Example: Load the Payload configuration file
-* const config = path.resolve(__dirname, './payload/payload.config.js');
-*
-* // 1. Initialize Payload (this step makes 'req.payload' available)
-* async function start() {
-* await payload.init({ secret: 'MY_SECRET', config });
-*
-* // 2. Attach the router under the /api path
-* // This will handle requests like:
-* // POST /api/users/login (Auth)
-* // GET /api/users/me (Auth Status)
-* // GET /api/posts (CRUD)
-* // POST /api/products (CRUD)
-* app.use('/api', payloadAPIRouter());
-*
-* app.listen(4000, () => {
-* console.log('Express API running on port 4000');
-* });
-* }
-* start();
-*/
+ * Example Usage in your Express main file (e.g., server.js):
+ *
+ * import express from 'express';
+ * import payload from 'payload';
+ * import payloadAPIRouter from './payload-next-app.js';
+ * import path from 'path';
+ *
+ * const app = express();
+ *
+ * // Example: Load the Payload configuration file
+ * const config = path.resolve(__dirname, './payload/payload.config.js');
+ *
+ * // 1. Initialize Payload (this step makes 'req.payload' available)
+ * async function start() {
+ * await payload.init({ secret: 'MY_SECRET', config });
+ *
+ * // 2. Attach the router under the /api path
+ * // This will handle requests like:
+ * // POST /api/users/login (Auth)
+ * // GET /api/users/me (Auth Status)
+ * // GET /api/posts (CRUD)
+ * // POST /api/products (CRUD)
+ * app.use('/api', payloadAPIRouter());
+ *
+ * app.listen(4000, () => {
+ * console.log('Express API running on port 4000');
+ * });
+ * }
+ * start();
+ */

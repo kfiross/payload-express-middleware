@@ -13,8 +13,6 @@
 // // }
 // // await $`tsc --outDir dist/types --declaration --emitDeclarationOnly --declarationMap`
 
-
-
 // import type { BuildConfig } from 'bun'
 // import dts from 'bun-plugin-dts'
 
@@ -31,7 +29,7 @@
 //     format: 'esm',
 //     naming: "[dir]/[name].js",
 //   }),
-  
+
 //   Bun.build({
 //     ...defaultBuildConfig,
 //     //@ts-ignore
@@ -39,8 +37,6 @@
 //     naming: "[dir]/[name].cjs",
 //   })
 // ])
-
-
 
 // await Bun.build({
 //   entrypoints: ["src/index.ts"],
@@ -65,9 +61,9 @@
 // }
 
 // import dts from 'bun-plugin-dts';
-import {  $ } from "bun"
+import { $ } from "bun";
 
-await $`rm -rf dist`
+await $`rm -rf dist`;
 
 await Bun.build({
   entrypoints: ["src/index.ts"],
@@ -75,6 +71,6 @@ await Bun.build({
   format: "esm",
   external: ["*"],
   // plugins: [dts()],
-})
+});
 
-await $`tsc --outDir dist/types --declaration --emitDeclarationOnly --declarationMap`
+await $`tsc --outDir dist/types --declaration --emitDeclarationOnly --declarationMap`;
