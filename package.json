@@ -1,36 +1,58 @@
 {
   "name": "payload-express-middleware",
+  "version": "0.3.0",
+  "author": "Kfir Matityhau<kfir25812@gmail.com>",
+  "homepage:": "https://github.com/kfiross/payload-express-middleware",
+  "description": "Enabling Express.js backend to interact with Payload CMS APIs seemlessly",
+  "license": "MIT",
   "type": "module",
-  "version": "0.0.0",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "description": "",
-  "exports": {
-    "types": "./dist/index.d.ts",
-    "import": "./dist/index.js",
-    "require": "./dist/index.cjs"
-  },
+  "main": "./dist/esm/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+"exports": {
+  ".": {
+    "import": "./dist/esm/index.js",
+    "require": "./dist/esm/index.js",
+    "types": "./dist/types/index.d.ts"
+  }
+},
   "scripts": {
     "build": "bun run build.ts",
-    "prepublishOnly": "bun run build"
+    "format": "bun x prettier --write '**/*.{js,jsx,ts,tsx,json,md,yaml,yml}'",
+    "release": "bun run build && changeset publish"
   },
   "files": [
+    "src",
     "dist"
   ],
   "keywords": [
+    "payload",
+    "express",
+    "middleware",
     "bun"
   ],
-  "license": "MIT",
-  "homepage": "https://github.com/wobsoriano/pkg-name#readme",
+  "homepage": "https://github.com/kfiross/payload-express-middleware#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wobsoriano/pkg-name.git"
+    "url": "git+https://github.com/kfiross/payload-express-middleware.git"
   },
-  "bugs": "https://github.com/wobsoriano/pkg-name/issues",
-  "author": "Robert Soriano <sorianorobertc@gmail.com>",
+  "bugs": {
+    "url": "https://github.com/kfiross/payload-express-middleware/issues"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "payload": "^3.0.0",
+    "jsonwebtoken": "^9.0.0"
+  },
   "devDependencies": {
+    "@types/bun": "^1.1.10",
+    "@types/express": "4.17.21",
+    "@types/jest": "29.5.12",
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/node": "^22.13.13",
     "bun-plugin-dts": "^0.3.0",
-    "@types/bun": "^1.1.10"
+    "prettier": "3.6.2",
+    "sort-package-json": "3.4.0",
+    "typescript": "5.9.3"
   }
 }
