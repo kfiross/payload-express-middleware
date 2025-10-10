@@ -19,7 +19,7 @@
   "scripts": {
     "build": "bun run build.ts",
     "format": "bun x prettier --write '**/*.{js,jsx,ts,tsx,json,md,yaml,yml}'",
-    "release": "bun run build && changeset publish"
+    "release": "bun run build && bun changeset publish"
   },
   "files": [
     "src",
@@ -41,10 +41,11 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "payload": "^3.0.0",
-    "jsonwebtoken": "^9.0.0"
+    "jsonwebtoken": "^9.0.0",
+    "payload": "^3.0.0"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
     "@types/bun": "^1.1.10",
     "@types/express": "4.17.21",
     "@types/jest": "29.5.12",
@@ -54,5 +55,6 @@
     "prettier": "3.6.2",
     "sort-package-json": "3.4.0",
     "typescript": "5.9.3"
-  }
+  },
+  "registry": "https://registry.npmjs.org/"
 }
