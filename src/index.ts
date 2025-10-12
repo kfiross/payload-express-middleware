@@ -20,11 +20,11 @@ interface PayloadRequest
   user: any; // Payload user's data
 }
 
-export function calc(a: number, b: number): number {
-  return a + b;
+type PayloadAPIRouterMiddlewareOptions = {
+  simpleResponses: boolean
 }
 
-export function payloadAPIRouterMiddleware(payload: Payload) {
+export function payloadAPIRouterMiddleware(payload: Payload, options?: PayloadAPIRouterMiddlewareOptions) {
   const router = Router();
 
   /**
@@ -249,7 +249,8 @@ export function payloadAPIRouterMiddleware(payload: Payload) {
         ...query, // Pass all query params (limit, page, where, sort, etc.)
       });
 
-      return res.status(200).json(result.docs);
+      
+      return res.status(200).json(options?.simpleResponses ? result.docs : result);
     }),
   );
 
@@ -368,7 +369,9 @@ export function payloadAPIRouterMiddleware(payload: Payload) {
     if (err.status === 401) {
       return res
         .status(401)
-        .json({ error: "Unauthorized", message: err.message });
+        .json({ errors: {
+          message: [err.message]
+        }});
     }
 
     // Handle not-found errors specifically if Payload doesn't map them correctly
