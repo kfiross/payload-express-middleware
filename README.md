@@ -54,7 +54,7 @@ async function start() {
   });
 
   // Use the middleware
-  app.use(payloadAPIRouterMiddleware(payload, options));    // options are Optional
+  app.use(payloadAPIRouterMiddleware(payload, options)); // options are Optional
 
   // Use your other middleware, routes, etc
   // ....
@@ -126,9 +126,6 @@ This function creates an Express router that maps API routes to Payload's Local 
 - `payload`: The initialized Payload CMS instance.
 - `options`: Additional options to the middleware:
   - `simpleResponses?: boolean` - if set to true return `response.docs` as the whole response
-
-
-
 
 ## Error Handling
 

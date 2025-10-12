@@ -21,10 +21,13 @@ interface PayloadRequest
 }
 
 type PayloadAPIRouterMiddlewareOptions = {
-  simpleResponses: boolean
-}
+  simpleResponses: boolean;
+};
 
-export function payloadAPIRouterMiddleware(payload: Payload, options?: PayloadAPIRouterMiddlewareOptions) {
+export function payloadAPIRouterMiddleware(
+  payload: Payload,
+  options?: PayloadAPIRouterMiddlewareOptions,
+) {
   const router = Router();
 
   /**
@@ -143,12 +146,10 @@ export function payloadAPIRouterMiddleware(payload: Payload, options?: PayloadAP
   const isAuthenticated = (req, res, next) => {
     // req.user is populated by Payload's internal Express authentication middleware
     if (!req.user) {
-      return res
-        .status(401)
-        .json({
-          error: "Unauthorized",
-          message: "Payload: Authentication required to perform actions.",
-        });
+      return res.status(401).json({
+        error: "Unauthorized",
+        message: "Payload: Authentication required to perform actions.",
+      });
     }
     next();
   };
@@ -249,8 +250,9 @@ export function payloadAPIRouterMiddleware(payload: Payload, options?: PayloadAP
         ...query, // Pass all query params (limit, page, where, sort, etc.)
       });
 
-      
-      return res.status(200).json(options?.simpleResponses ? result.docs : result);
+      return res
+        .status(200)
+        .json(options?.simpleResponses ? result.docs : result);
     }),
   );
 
@@ -367,11 +369,11 @@ export function payloadAPIRouterMiddleware(payload: Payload, options?: PayloadAP
 
     // Handle specific Payload auth errors (e.g., login failed)
     if (err.status === 401) {
-      return res
-        .status(401)
-        .json({ errors: {
-          message: [err.message]
-        }});
+      return res.status(401).json({
+        errors: {
+          message: [err.message],
+        },
+      });
     }
 
     // Handle not-found errors specifically if Payload doesn't map them correctly
