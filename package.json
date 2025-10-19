@@ -1,6 +1,6 @@
 {
   "name": "payload-express-middleware",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "author": "Kfir Matityhau<kfir25812@gmail.com>",
   "homepage:": "https://github.com/kfiross/payload-express-middleware",
   "description": "Enabling Express.js backend to interact with Payload CMS APIs seemlessly",
