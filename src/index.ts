@@ -13,8 +13,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { Payload } from "payload";
 import { NextFunction, Request, Response, Router, Express } from "express";
-import {parse} from 'qs-esm'
-import url from 'url'
+import { parse } from "qs-esm";
+import url from "url";
 
 interface PayloadRequestQuery extends core.Query {}
 interface PayloadRequest
@@ -33,29 +33,27 @@ export function payloadAPIRouterMiddleware(
   const router = Router();
 
   const queryParser = (req: any, res: any, next: NextFunction) => {
+    const parsedUrl = url.parse(req.url);
+    const queryString = parsedUrl.query || "";
 
-    const parsedUrl = url.parse(req.url)
-    const queryString = parsedUrl.query || ''
-
-    console.log({parsedUrl})
-    console.log({queryString})
+    console.log({ parsedUrl });
+    console.log({ queryString });
 
     const parsedQuery = parse(queryString, {
       decoder(value: string) {
-        if (!isNaN(Number(value))) return Number(value)
-        if (value === 'true') return true
-        if (value === 'false') return false
-        return value
+        if (!isNaN(Number(value))) return Number(value);
+        if (value === "true") return true;
+        if (value === "false") return false;
+        return value;
       },
-    })
+    });
 
-    console.log({parsedQuery})
+    console.log({ parsedQuery });
 
-    req.query = parsedQuery
+    req.query = parsedQuery;
 
-    next()
-  }
-
+    next();
+  };
 
   /**
    * Custom JWT Auth Middleware for Payload
@@ -303,12 +301,10 @@ export function payloadAPIRouterMiddleware(
         ...query, // Pass all query params (where, sort, etc.)
       });
 
-      return res
-        .status(200)
-        .json(result);
+      return res.status(200).json(result);
     }),
   );
-  
+
   /**
    * 6. FIND BY ID (GET /api/:collection/:id)
    * Maps to: payload.findByID({ collection, id, depth, ... })
@@ -339,7 +335,6 @@ export function payloadAPIRouterMiddleware(
       return res.status(200).json(result);
     }),
   );
-
 
   /**
    * 7. CREATE (POST /api/:collection)
