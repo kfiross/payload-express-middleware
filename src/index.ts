@@ -13,6 +13,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { Payload } from "payload";
 import { NextFunction, Request, Response, Router, Express } from "express";
+import {parse} from 'qs-esm'
+import url from 'url'
 
 interface PayloadRequestQuery extends core.Query {}
 interface PayloadRequest
@@ -29,6 +31,31 @@ export function payloadAPIRouterMiddleware(
   options?: PayloadAPIRouterMiddlewareOptions,
 ) {
   const router = Router();
+
+  const queryParser = (req: any, res: any, next: NextFunction) => {
+
+    const parsedUrl = url.parse(req.url)
+    const queryString = parsedUrl.query || ''
+
+    console.log({parsedUrl})
+    console.log({queryString})
+
+    const parsedQuery = parse(queryString, {
+      decoder(value: string) {
+        if (!isNaN(Number(value))) return Number(value)
+        if (value === 'true') return true
+        if (value === 'false') return false
+        return value
+      },
+    })
+
+    console.log({parsedQuery})
+
+    req.query = parsedQuery
+
+    next()
+  }
+
 
   /**
    * Custom JWT Auth Middleware for Payload
@@ -239,10 +266,10 @@ export function payloadAPIRouterMiddleware(
     "/api/:collection",
     payloadJwtAuthMiddleware,
     isAuthenticated,
+    queryParser,
     asyncHandler(async (req, res) => {
       const { collection } = req.params;
       const { query } = req;
-
       const result = await payload.find({
         collection,
         depth: query.depth ? parseInt(query.depth) : 0, // Default depth to 0 for performance
@@ -257,7 +284,33 @@ export function payloadAPIRouterMiddleware(
   );
 
   /**
-   * 5. FIND BY ID (GET /api/:collection/:id)
+   * 5. COUNT (GET /api/:collection)
+   * Maps to: payload.count({ collection, id, depth, ... })
+   * NOTE: req is passed to enforce Payload's 'read' access control.
+   */
+  router.get(
+    "/api/:collection/count",
+    payloadJwtAuthMiddleware,
+    isAuthenticated,
+    queryParser,
+    asyncHandler(async (req, res) => {
+      const { collection } = req.params;
+      const { query } = req;
+      const result = await payload.count({
+        collection,
+        depth: query.depth ? parseInt(query.depth) : 0, // Default depth to 0 for performance
+        req, // <--- IMPORTANT: Pass req to enforce Payload's access control (e.g., read: authenticated)
+        ...query, // Pass all query params (where, sort, etc.)
+      });
+
+      return res
+        .status(200)
+        .json(result);
+    }),
+  );
+  
+  /**
+   * 6. FIND BY ID (GET /api/:collection/:id)
    * Maps to: payload.findByID({ collection, id, depth, ... })
    * NOTE: req is passed to enforce Payload's 'read' access control.
    */
@@ -287,8 +340,9 @@ export function payloadAPIRouterMiddleware(
     }),
   );
 
+
   /**
-   * 6. CREATE (POST /api/:collection)
+   * 7. CREATE (POST /api/:collection)
    * Maps to: payload.create({ collection, data: req.body })
    * Secured: Requires authenticated user (req.user)
    */
@@ -310,7 +364,7 @@ export function payloadAPIRouterMiddleware(
   );
 
   /**
-   * 7. UPDATE (PATCH /api/:collection/:id)
+   * 8. UPDATE (PATCH /api/:collection/:id)
    * Maps to: payload.update({ collection, id, data: req.body })
    * Secured: Requires authenticated user (req.user)
    */
@@ -332,7 +386,7 @@ export function payloadAPIRouterMiddleware(
   );
 
   /**
-   * 8. DELETE (DELETE /api/:collection/:id)
+   * 9. DELETE (DELETE /api/:collection/:id)
    * Maps to: payload.delete({ collection, id })
    * Secured: Requires authenticated user (req.user)
    */
