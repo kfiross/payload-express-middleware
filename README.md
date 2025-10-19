@@ -83,6 +83,7 @@ Note: `{user-collection}` defined by your `payload.config.js`
 #### CRUD Routes
 
 - **Find Many**: `GET /api/:collection`
+- **Count**: `POST /api/:collection/count`
 - **Find By ID**: `GET /api/:collection/:id`
 - **Create**: `POST /api/:collection`
 - **Update**: `PATCH /api/:collection/:id`
