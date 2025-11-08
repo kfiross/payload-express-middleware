@@ -1,3 +1,6 @@
+[0.6.0]
+- Added support sending custom routes defined in payload config
+
 [0.5.0]
 
 - Added support to send query params such as `where`,`select`,`limit` accordingly to what Payload REST API supports
