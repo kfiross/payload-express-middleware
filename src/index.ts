@@ -32,6 +32,15 @@ export function payloadAPIRouterMiddleware(
 ) {
   const router = Router();
 
+    /**
+   * Helper function to handle async operations and catch errors consistently.
+   * @param {function} fn - The asynchronous function to execute.
+   */
+  const asyncHandler = (fn) => (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+
+
   const queryParser = (req: any, res: any, next: NextFunction) => {
     const parsedUrl = url.parse(req.url);
     const queryString = parsedUrl.query || "";
@@ -143,6 +152,83 @@ export function payloadAPIRouterMiddleware(
     next();
   }
 
+  // Matches /api/anything and /api/anything/...
+  router.all(/^\/(api|auth)\/([^\/]+)(\/.*)?$/, asyncHandler(async (req, res, next) => {
+    const { customPath } = req.params;
+
+    // try custom (API) endpoint
+    const fullPath = req.path;
+
+    console.log (`Proxying ...${fullPath} API endpoint`)
+
+
+    const payloadCollections = Object.keys(payload.collections);
+    if (payloadCollections.includes(customPath)) {
+      return next();
+    }
+    try {
+      const myEndpoint = payload.config.endpoints.find(e => e.path === fullPath);
+      if(!myEndpoint?.handler){
+        // return res.status(404).json({error: 'No exist!'})
+        return next();
+      }
+      
+      console.log(`myEndpoint.method=${myEndpoint.method}`)
+      console.log(`req.method=${req.method}`)
+      const headersObj = req.headers;
+      // only call matched Method types
+      if(myEndpoint.method.toUpperCase() !== req.method){
+        return next();
+      }
+      const payloadReq: PayloadRequest = {
+        //@ts-ignore
+        'payload': payload,                  
+        fallbackLocale: 'en',
+        context: {},
+        payloadAPI: 'REST',
+        headers: {
+            ...headersObj,
+            get: (key: string) => {
+              const val = headersObj[key.toLowerCase()];
+              if (Array.isArray(val)) return val[0];
+              return val || null;
+            }
+          },
+        user: null,
+        query: req.query,
+        // body: {},
+        routeParams: {},
+        t: (key: string) => key,  // dummy i18n function
+        // @ts-ignore
+        payloadDataLoader: {
+          find: payload.find.bind(payload),
+        },
+      };
+      //@ts-ignore
+      const result = await myEndpoint.handler(payloadReq);
+      if (result.status >= 300 && result.status < 400) {
+        const location = result.headers.get('Location');
+        console.log('Redirecting to:', location);
+        return res.redirect(result.status, location);
+      }
+      console.log({result})
+
+      const data = await result.json()
+
+      // Send the response back
+      return res.status(result.status || 200).json(data);
+
+    } catch (error: any) {
+      // Handle errors from Payload
+      const status = error.status || error.response?.status || 500;
+      const message = error.data || error.message || 'Internal server error';
+      console.error({ error: message, status });
+      // console.error(error);
+      // return next("router");
+      next("router");
+    }
+  }))
+
   router.use(
     "/api/:collection/",
     (req: Request, res: Response, next: NextFunction) => {
@@ -156,13 +242,6 @@ export function payloadAPIRouterMiddleware(
     },
   );
 
-  /**
-   * Helper function to handle async operations and catch errors consistently.
-   * @param {function} fn - The asynchronous function to execute.
-   */
-  const asyncHandler = (fn) => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
 
   /**
    * Middleware to enforce authentication for mutation routes (POST, PATCH, DELETE).
